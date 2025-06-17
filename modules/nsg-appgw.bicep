@@ -22,7 +22,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
           destinationAddressPrefix: '*'
           destinationPortRange: '80,443'
         }
-      },
+      }
       {
         name: 'AllowAzureLoadBalancer'
         properties: {
@@ -31,8 +31,8 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
           access: 'Allow'
           protocol: '*'
           sourceAddressPrefix: 'AzureLoadBalancer'
-          destinationAddressPrefix: '*'
           sourcePortRange: '*'
+          destinationAddressPrefix: '*'
           destinationPortRange: '*'
         }
       }
