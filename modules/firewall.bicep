@@ -1,8 +1,11 @@
 param location string
-param firewallName string
-param publicIpName string
-param skuTier string = 'Premium'
-param threatIntelMode string = 'Alert'
+param vnetName string
+param subnetName string
+param logAnalyticsWorkspaceId string
+param firewallPolicyId string
+param environment string
+param firewallName string = 'fw-${environment}-${uniqueString(resourceGroup().id)}'
+param publicIpName string = 'pip-fw-${environment}-${uniqueString(resourceGroup().id)}'
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   name: publicIpName
@@ -11,26 +14,30 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
     name: 'Standard'
   }
   properties: {
-    // Removed invalid 'zones' property
     publicIPAllocationMethod: 'Static'
-    idleTimeoutInMinutes: 4
   }
 }
 
-resource firewall 'Microsoft.Network/azureFirewalls@2023-05-01' = {
+resource azFirewall 'Microsoft.Network/azureFirewalls@2023-05-01' = {
   name: firewallName
   location: location
+  tags: {
+    environment: environment
+  }
   properties: {
     sku: {
-      tier: skuTier
+      name: 'AZFW_VNet'
+      tier: 'Standard'
     }
-    threatIntelMode: threatIntelMode
+    firewallPolicy: {
+      id: firewallPolicyId
+    }
     ipConfigurations: [
       {
-        name: 'ipconfig1'
+        name: 'fw-ipconfig'
         properties: {
           subnet: {
-            id: resourceId('Microsoft.Network/virtualNetworks/subnets', 'vnetName', 'AzureFirewallSubnet')
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)
           }
           publicIPAddress: {
             id: publicIp.id
@@ -41,5 +48,34 @@ resource firewall 'Microsoft.Network/azureFirewalls@2023-05-01' = {
   }
 }
 
-output firewallId string = firewall.id
+resource diag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (!empty(logAnalyticsWorkspaceId)) {
+  name: 'diag-fw-${environment}'
+  scope: azFirewall
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        category: 'AzureFirewallApplicationRule'
+        enabled: true
+      }
+      {
+        category: 'AzureFirewallNetworkRule'
+        enabled: true
+      }
+      {
+        category: 'AzureFirewallDnsProxy'
+        enabled: true
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+      }
+    ]
+  }
+}
+
+output firewallId string = azFirewall.id
 output publicIpId string = publicIp.id
+output firewallPrivateIp string = azFirewall.properties.ipConfigurations[0].properties.privateIPAddress
