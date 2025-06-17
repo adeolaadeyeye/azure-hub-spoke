@@ -1,21 +1,20 @@
 param location string
 param vnetName string
 param subnetName string
-param environment string = 'prod'  // 'prod' or 'nonprod'
-param logAnalyticsWorkspaceId string = ''  // From monitoring module
+param environment string = 'prod'
+param logAnalyticsWorkspaceId string = ''
 
-// Unique naming with environment tag
 var wafName = 'waf-${environment}-${uniqueString(resourceGroup().id)}'
 
-// Zone-redundant public IP
+// Public IP for WAF
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   name: 'pip-${wafName}'
   location: location
-  sku: { 
-    name: 'Standard' 
+  sku: {
+    name: 'Standard'
   }
-  zones: (environment == 'prod') ? ['1', '2', '3'] : []  // Zone redundancy for prod
-  properties: { 
+  zones: (environment == 'prod') ? ['1', '2', '3'] : []
+  properties: {
     publicIPAllocationMethod: 'Static'
     ddosSettings: {
       protectionMode: 'Enabled'
@@ -23,7 +22,28 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   }
 }
 
-// Application Gateway WAF v2 with auto-scaling
+// WAF Policy Resource
+resource wafPolicy 'Microsoft.Network/applicationGatewayWebApplicationFirewallPolicies@2023-05-01' = {
+  name: 'waf-policy-${environment}'
+  location: location
+  properties: {
+    policySettings: {
+      enabledState: 'Enabled'
+      mode: (environment == 'prod') ? 'Prevention' : 'Detection'
+    }
+    customRules: []
+    managedRules: {
+      managedRuleSets: [
+        {
+          ruleSetType: 'OWASP'
+          ruleSetVersion: '3.2'
+        }
+      ]
+    }
+  }
+}
+
+// App Gateway with WAF Policy
 resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
   name: wafName
   location: location
@@ -31,12 +51,12 @@ resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
     environment: environment
     managedBy: 'Bicep'
   }
-  sku: { 
-    name: 'WAF_v2' 
-    tier: 'WAF_v2' 
+  sku: {
+    name: 'WAF_v2'
+    tier: 'WAF_v2'
   }
   properties: {
-    autoscaleConfiguration: (environment == 'prod') ? {  // Auto-scaling for prod
+    autoscaleConfiguration: (environment == 'prod') ? {
       minCapacity: 2
       maxCapacity: 5
     } : {
@@ -46,9 +66,9 @@ resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
     gatewayIPConfigurations: [
       {
         name: 'appGwIpConfig'
-        properties: { 
-          subnet: { 
-            id: resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName) 
+        properties: {
+          subnet: {
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)
           }
         }
       }
@@ -56,26 +76,32 @@ resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
     frontendIPConfigurations: [
       {
         name: 'frontend'
-        properties: { 
-          publicIPAddress: { id: publicIp.id } 
+        properties: {
+          publicIPAddress: {
+            id: publicIp.id
+          }
         }
       }
     ]
     frontendPorts: [
-      { 
-        name: 'httpPort' 
-        properties: { port: 80 } 
-      },
-      { 
-        name: 'httpsPort' 
-        properties: { port: 443 } 
+      {
+        name: 'httpPort'
+        properties: {
+          port: 80
+        }
+      }
+      {
+        name: 'httpsPort'
+        properties: {
+          port: 443
+        }
       }
     ]
     sslCertificates: [
       {
         name: 'defaultCert'
         properties: {
-          keyVaultSecretId: ''  // Add your KV secret ID
+          keyVaultSecretId: '' // TODO: Add Key Vault Secret ID
         }
       }
     ]
@@ -83,11 +109,11 @@ resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
       {
         name: 'httpsListener'
         properties: {
-          frontendIPConfiguration: { 
-            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', wafName, 'frontend') 
+          frontendIPConfiguration: {
+            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', wafName, 'frontend')
           }
-          frontendPort: { 
-            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', wafName, 'httpsPort') 
+          frontendPort: {
+            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', wafName, 'httpsPort')
           }
           protocol: 'Https'
           sslCertificate: {
@@ -96,27 +122,15 @@ resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
         }
       }
     ]
-    wafConfiguration: {
-      enabled: true
-      firewallMode: (environment == 'prod') ? 'Prevention' : 'Detection'  // Stricter in prod
-      ruleSetType: 'OWASP'
-      ruleSetVersion: '3.2'
-      requestBodyCheck: true
-      maxRequestBodySizeInKb: 128
-      fileUploadLimitInMb: 100
-      exclusionManagedRulesets: [  // Example exclusions
-        {
-          ruleSetType: 'Microsoft_BotManagerRuleSet'
-          ruleSetVersion: '1.0'
-        }
-      ]
+    firewallPolicy: {
+      id: wafPolicy.id
     }
     enableHttp2: true
     forceFirewallPolicyAssociation: true
   }
 }
 
-// Diagnostic settings (critical for WAF monitoring)
+// Diagnostic settings
 resource diagSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (!empty(logAnalyticsWorkspaceId)) {
   name: 'diag-${wafName}'
   scope: appgw
@@ -130,7 +144,7 @@ resource diagSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview'
           days: (environment == 'prod') ? 90 : 30
           enabled: true
         }
-      },
+      }
       {
         category: 'ApplicationGatewayFirewallLog'
         enabled: true
