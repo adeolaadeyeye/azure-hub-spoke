@@ -5,7 +5,7 @@ param logAnalyticsWorkspaceId string = ''
 
 var bastionName = 'bst-${environment}-${uniqueString(resourceGroup().id)}'
 var bastionSku = (environment == 'prod') ? 'Premium' : 'Standard'
-var bastionScale = (environment == 'prod') ? 2 : 2  // Minimum is 2 to avoid BCP329
+var bastionScale = 2 // Minimum of 2 to avoid platform warning
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   name: 'pip-${bastionName}'

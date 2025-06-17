@@ -6,7 +6,6 @@ param logAnalyticsWorkspaceId string = ''
 
 var wafName = 'waf-${environment}-${uniqueString(resourceGroup().id)}'
 
-// Public IP for WAF
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   name: 'pip-${wafName}'
   location: location
@@ -22,7 +21,6 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = {
   }
 }
 
-// WAF Policy Resource
 resource wafPolicy 'Microsoft.Network/applicationGatewayWebApplicationFirewallPolicies@2023-05-01' = {
   name: 'waf-policy-${environment}'
   location: location
@@ -43,7 +41,6 @@ resource wafPolicy 'Microsoft.Network/applicationGatewayWebApplicationFirewallPo
   }
 }
 
-// App Gateway with WAF Policy
 resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
   name: wafName
   location: location
@@ -86,22 +83,18 @@ resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
     frontendPorts: [
       {
         name: 'httpPort'
-        properties: {
-          port: 80
-        }
+        properties: { port: 80 }
       }
       {
         name: 'httpsPort'
-        properties: {
-          port: 443
-        }
+        properties: { port: 443 }
       }
     ]
     sslCertificates: [
       {
         name: 'defaultCert'
         properties: {
-          keyVaultSecretId: '' // TODO: Add Key Vault Secret ID
+          keyVaultSecretId: '' // TODO: add secret
         }
       }
     ]
@@ -130,7 +123,6 @@ resource appgw 'Microsoft.Network/applicationGateways@2023-05-01' = {
   }
 }
 
-// Diagnostic settings
 resource diagSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (!empty(logAnalyticsWorkspaceId)) {
   name: 'diag-${wafName}'
   scope: appgw
