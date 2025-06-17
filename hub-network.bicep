@@ -44,9 +44,8 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
         name: 'AzureFirewallSubnet'
         properties: {
           addressPrefix: '10.0.1.0/26'
-          delegations: []
         }
-      },
+      }
       {
         name: 'AzureBastionSubnet'
         properties: {
@@ -55,7 +54,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
             id: nsgBastion.outputs.nsgId
           }
         }
-      },
+      }
       {
         name: 'AppGatewaySubnet'
         properties: {
@@ -64,7 +63,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
             id: nsgAppGw.outputs.nsgId
           }
         }
-      },
+      }
       {
         name: 'SharedSubnet'
         properties: {
@@ -78,42 +77,36 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
   }
 }
 
-// ========== FIREWALL COMPONENTS ========== //
+// ========== FIREWALL POLICY ========== //
 module fwPolicy 'modules/firewallPolicy.bicep' = {
   name: 'fw-policy-${environment}-deploy'
-  dependsOn: [
-    vnet
-  ]
   params: {
     location: location
-    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
     environment: environment
+    policyName: 'fw-policy-${environment}'
+    skuTier: 'Standard'
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
   }
 }
 
+// ========== FIREWALL ========== //
 module firewall 'modules/firewall.bicep' = {
   name: 'firewall-${environment}-deploy'
-  dependsOn: [
-    fwPolicy
-    vnet
-  ]
   params: {
     location: location
     vnetName: vnet.name
     subnetName: 'AzureFirewallSubnet'
-    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
     firewallPolicyId: fwPolicy.outputs.policyId
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
     environment: environment
+    firewallName: 'fw-${environment}'
+    publicIpName: 'pip-fw-${environment}'
   }
 }
 
 // ========== WAF (PROD ONLY) ========== //
 module waf 'modules/waf.bicep' = if (environment == 'prod') {
   name: 'waf-prod-deploy'
-  dependsOn: [
-    vnet
-    nsgAppGw
-  ]
   params: {
     location: location
     vnetName: vnet.name
@@ -126,14 +119,11 @@ module waf 'modules/waf.bicep' = if (environment == 'prod') {
 // ========== BASTION HOST ========== //
 module bastion 'modules/bastion.bicep' = {
   name: 'bastion-${environment}-deploy'
-  dependsOn: [
-    vnet
-    nsgBastion
-  ]
   params: {
     location: location
     vnetName: vnet.name
     environment: environment
+    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
   }
 }
 
