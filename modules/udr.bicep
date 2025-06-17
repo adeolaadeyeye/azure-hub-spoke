@@ -1,10 +1,9 @@
 param location string
 param vnetName string
-param subnetNames array  # Now supports multiple subnets
+param subnetNames array
 param fwPrivateIp string
 param routeNamePrefix string = 'default'
 
-# Latest API version with zone redundancy support
 resource routeTable 'Microsoft.Network/routeTables@2023-05-01' = {
   name: 'rt-${routeNamePrefix}-${uniqueString(resourceGroup().id)}'
   location: location
@@ -13,7 +12,7 @@ resource routeTable 'Microsoft.Network/routeTables@2023-05-01' = {
     purpose: 'ForceTunnelViaFirewall'
   }
   properties: {
-    disableBgpRoutePropagation: true  # Critical for hybrid networks
+    disableBgpRoutePropagation: true
     routes: [
       {
         name: 'default-to-fw'
@@ -23,7 +22,6 @@ resource routeTable 'Microsoft.Network/routeTables@2023-05-01' = {
           nextHopIpAddress: fwPrivateIp
         }
       }
-      # Add Azure-specific required routes (Example)
       {
         name: 'azure-services'
         properties: {
@@ -35,7 +33,6 @@ resource routeTable 'Microsoft.Network/routeTables@2023-05-01' = {
   }
 }
 
-# Apply route table to all specified subnets
 resource subnetAssociations 'Microsoft.Network/virtualNetworks/subnets@2023-05-01' = [for subnetName in subnetNames: {
   name: '${vnetName}/${subnetName}'
   properties: {
@@ -43,7 +40,6 @@ resource subnetAssociations 'Microsoft.Network/virtualNetworks/subnets@2023-05-0
     routeTable: {
       id: routeTable.id
     }
-    # Preserve existing subnet policies
     privateEndpointNetworkPolicies: reference(resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)).privateEndpointNetworkPolicies
   }
 }]
